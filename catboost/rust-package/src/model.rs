@@ -11,20 +11,31 @@ use std::path::Path;
 
 pub struct Model {
     handle: *mut catboost_sys::ModelCalcerHandle,
+    path: String
 }
 
 impl Model {
-    fn new() -> Self {
+    fn new(path: &String) -> Self {
         let model_handle = unsafe { catboost_sys::ModelCalcerCreate() };
         Model {
             handle: model_handle,
+            path: path.to_string()
         }
     }
 
     /// Load a model from a file
-    pub fn load<P: AsRef<Path>>(path: P) -> CatBoostResult<Self> {
-        let model = Model::new();
-        let path_c_str = CString::new(path.as_ref().as_os_str().as_bytes()).unwrap();
+    pub fn load(path: &String) -> CatBoostResult<Self> {
+        let model = Model::new(&path);
+        let path_c_str = CString::new(Path::new(path).as_os_str().as_bytes()).unwrap();
+        CatBoostError::check_return_value(unsafe {
+            catboost_sys::LoadFullModelFromFile(model.handle, path_c_str.as_ptr())
+        })?;
+        Ok(model)
+    }
+
+    pub fn load_from(&self) -> CatBoostResult<Self> {
+        let model = Model::new(&self.path);
+        let path_c_str = CString::new(Path::new(&self.path).as_os_str().as_bytes()).unwrap();
         CatBoostError::check_return_value(unsafe {
             catboost_sys::LoadFullModelFromFile(model.handle, path_c_str.as_ptr())
         })?;
@@ -33,7 +44,7 @@ impl Model {
 
     /// Load a model from a buffer
     pub fn load_buffer<P: AsRef<Vec<u8>>>(buffer: P) -> CatBoostResult<Self> {
-        let model = Model::new();
+        let model = Model::new(&"".to_string());
         CatBoostError::check_return_value(unsafe {
             catboost_sys::LoadFullModelFromBuffer(
                 model.handle,
@@ -256,6 +267,8 @@ impl Model {
         CatBoostError::check_return_value( unsafe { catboost_sys::EnableGPUEvaluation(self.handle, 0) } )
     }
 }
+
+unsafe impl Send for Model {}
 
 impl Drop for Model {
     fn drop(&mut self) {
